@@ -6,12 +6,13 @@ const CHARS = '0123456789ABCDEF';
 
 export default function Home() {
   const [page, setPage] = useState('draw');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [status, setStatus] = useState('idle');
   const [code, setCode] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [drums, setDrums] = useState(Array(12).fill('?'));
-  const [progress, setProgress] = useState({ used: 0, total: 498 });
+  const [progress, setProgress] = useState({ used: 0, total: 1000 });
   const [stats, setStats] = useState(null);
   const [adminPass, setAdminPass] = useState('');
   const [resetMsg, setResetMsg] = useState('');
@@ -19,7 +20,12 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [alreadyBy, setAlreadyBy] = useState('');
 
-  useEffect(() => { fetchProgress(); }, []);
+  useEffect(() => {
+    fetchProgress();
+    // ซ่อนแท็บ Admin — เข้าได้ผ่าน /?admin=1
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === '1') setIsAdmin(true);
+  }, []);
 
   async function fetchProgress() {
     try {
@@ -126,7 +132,9 @@ export default function Home() {
     <main className={styles.main}>
       <nav className={styles.nav}>
         <button className={page === 'draw' ? styles.navActive : ''} onClick={() => setPage('draw')}>🎁 สุ่มรางวัล</button>
-        <button className={page === 'admin' ? styles.navActive : ''} onClick={() => { setPage('admin'); fetchStats(); }}>📊 Admin</button>
+        {isAdmin && (
+          <button className={page === 'admin' ? styles.navActive : ''} onClick={() => { setPage('admin'); fetchStats(); }}>📊 Admin</button>
+        )}
       </nav>
 
       {page === 'draw' && (
@@ -209,16 +217,21 @@ export default function Home() {
         </div>
       )}
 
-      {page === 'admin' && (
+      {isAdmin && page === 'admin' && (
         <div className={styles.adminPage}>
           <h2>Admin panel</h2>
 
           {stats && (
             <>
               <div className={styles.metricGrid}>
-                <div className={styles.metric}><div className={styles.metricLabel}>โค้ดทั้งหมด</div><div className={styles.metricValue}>{stats.total}</div></div>
-                <div className={styles.metric}><div className={styles.metricLabel}>แจกไปแล้ว</div><div className={`${styles.metricValue} ${styles.purple}`}>{stats.used}</div></div>
-                <div className={styles.metric}><div className={styles.metricLabel}>คงเหลือ</div><div className={`${styles.metricValue} ${styles.green}`}>{stats.remaining}</div></div>
+                <div className={styles.metric}><div className={styles.metricLabel}>โค้ดที่แสดง (total)</div><div className={styles.metricValue}>{stats.total}</div></div>
+                <div className={styles.metric}><div className={styles.metricLabel}>แจกไปแล้ว (display)</div><div className={`${styles.metricValue} ${styles.purple}`}>{stats.used}</div></div>
+                <div className={styles.metric}><div className={styles.metricLabel}>คงเหลือ (display)</div><div className={`${styles.metricValue} ${styles.green}`}>{stats.remaining}</div></div>
+              </div>
+              <div className={styles.metricGrid}>
+                <div className={styles.metric}><div className={styles.metricLabel}>โค้ดจริงทั้งหมด</div><div className={styles.metricValue}>{stats.realTotal}</div></div>
+                <div className={styles.metric}><div className={styles.metricLabel}>แจกจริงไปแล้ว</div><div className={`${styles.metricValue} ${styles.purple}`}>{stats.realUsed}</div></div>
+                <div className={styles.metric}><div className={styles.metricLabel}>โค้ดจริงคงเหลือ</div><div className={`${styles.metricValue} ${styles.green}`}>{stats.realTotal - stats.realUsed}</div></div>
               </div>
 
               <div className={styles.card}>
