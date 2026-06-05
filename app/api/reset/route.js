@@ -1,4 +1,6 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = Redis.fromEnv();
 
 export async function POST(req) {
   try {
@@ -7,11 +9,11 @@ export async function POST(req) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const ipKeys = await kv.keys('ip:*');
+    const ipKeys = await redis.keys('ip:*');
     for (const key of ipKeys) {
-      await kv.del(key);
+      await redis.del(key);
     }
-    await kv.del('used_codes');
+    await redis.del('used_codes');
 
     return Response.json({ status: 'ok', message: 'Reset complete' });
   } catch (err) {

@@ -1,5 +1,7 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { CODES } from '../../../lib/codes';
+
+const redis = Redis.fromEnv();
 
 export async function POST(req) {
   try {
@@ -8,17 +10,17 @@ export async function POST(req) {
       req.headers.get('x-real-ip') ||
       'unknown';
 
-    const existing = await kv.get(`ip:${ip}`);
-    if (existing !== null) {
+    const existing = await redis.get(`ip:${ip}`);
+    if (existing !== null && existing !== undefined) {
       return Response.json({ status: 'already_drawn', code: existing || null });
     }
 
-    const usedCount = await kv.llen('used_codes');
+    const usedCount = await redis.llen('used_codes');
     if (usedCount >= CODES.length) {
       return Response.json({ status: 'empty' });
     }
 
-    const allUsed = usedCount > 0 ? await kv.lrange('used_codes', 0, -1) : [];
+    const allUsed = usedCount > 0 ? await redis.lrange('used_codes', 0, -1) : [];
     const usedSet = new Set(allUsed);
     const remaining = CODES.filter(c => !usedSet.has(c));
 
@@ -28,8 +30,8 @@ export async function POST(req) {
 
     const code = remaining[Math.floor(Math.random() * remaining.length)];
 
-    await kv.set(`ip:${ip}`, code);
-    await kv.lpush('used_codes', code);
+    await redis.set(`ip:${ip}`, code);
+    await redis.lpush('used_codes', code);
 
     return Response.json({ status: 'won', code });
   } catch (err) {
