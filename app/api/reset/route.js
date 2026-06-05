@@ -26,7 +26,7 @@ export async function POST(req) {
     }
 
     // ลบ keys ด้วย SCAN แทน KEYS เพื่อไม่บล็อก Redis
-    const keyPatterns = ['line:*', 'rl:*'];
+    const keyPatterns = ['line:*', 'rl:*', 'rl:uid:*', 'rl:ip:*', 'rl:reset:*', '@upstash/ratelimit:*'];
     for (const pattern of keyPatterns) {
       let cursor = 0;
       do {
