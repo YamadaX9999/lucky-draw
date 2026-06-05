@@ -130,6 +130,7 @@ export default function Home() {
 
   return (
     <main className={styles.main}>
+      <img src="/banner.jpg" alt="banner" className={styles.banner} />
       <nav className={styles.nav}>
         <button className={page === 'draw' ? styles.navActive : ''} onClick={() => setPage('draw')}>🎁 สุ่มรางวัล</button>
         {isAdmin && (
