@@ -19,6 +19,7 @@ export default function Home() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
   const [alreadyBy, setAlreadyBy] = useState('');
+  const [retryAfter, setRetryAfter] = useState(0);
 
   useEffect(() => {
     fetchProgress();
@@ -84,6 +85,10 @@ export default function Home() {
         setCode(d.code);
         setAlreadyBy(d.by || '');
         setStatus(d.status === 'already_drawn' ? 'already' : 'won');
+      } else if (d.status === 'rate_limited') {
+        setRetryAfter(d.retryAfter || 24);
+        setStatus('rate_limited');
+        setDrums(Array(12).fill('-'));
       } else if (d.status === 'empty') {
         setStatus('empty');
         setDrums(Array(12).fill('-'));
@@ -187,6 +192,14 @@ export default function Home() {
               </div>
             )}
 
+            {status === 'rate_limited' && (
+              <div className={styles.resultEmpty}>
+                <div className={styles.emoji}>⏳</div>
+                <p>คุณสุ่มไปแล้วในวันนี้</p>
+                <small>สามารถสุ่มใหม่ได้ในอีกประมาณ {retryAfter} ชั่วโมง</small>
+              </div>
+            )}
+
             {status === 'empty' && (
               <div className={styles.resultEmpty}>
                 <div className={styles.emoji}>🎁</div>
@@ -195,7 +208,7 @@ export default function Home() {
               </div>
             )}
 
-            {status !== 'won' && status !== 'already' && status !== 'empty' && (
+            {status !== 'won' && status !== 'already' && status !== 'empty' && status !== 'rate_limited' && (
               <button
                 className={styles.drawBtn}
                 onClick={doDraw}
