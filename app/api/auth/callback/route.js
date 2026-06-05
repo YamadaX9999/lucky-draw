@@ -1,15 +1,20 @@
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
+  const error = searchParams.get('error');
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const redirectUri = `${baseUrl}/api/auth/callback`;
+
+  // prompt=none ล้มเหลว (user ยังไม่เคย authorize) → retry ด้วย consent
+  if (error === 'login_required' || error === 'consent_required' || error === 'interaction_required') {
+    return Response.redirect(`${baseUrl}/api/auth/line?retry=1`);
+  }
 
   if (!code) {
     return Response.redirect(`${baseUrl}/?auth=failed`);
   }
 
   try {
-    // แลก code เป็น access token
     const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -27,7 +32,6 @@ export async function GET(req) {
       return Response.redirect(`${baseUrl}/?auth=failed`);
     }
 
-    // ดึงข้อมูล profile
     const profileRes = await fetch('https://api.line.me/v2/profile', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
@@ -37,7 +41,6 @@ export async function GET(req) {
       return Response.redirect(`${baseUrl}/?auth=failed`);
     }
 
-    // ส่ง uid + displayName กลับไปหน้าหลักผ่าน URL param
     const params = new URLSearchParams({
       uid: profile.userId,
       name: profile.displayName,

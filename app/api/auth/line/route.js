@@ -1,6 +1,7 @@
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/auth/callback`;
+  const retry = searchParams.get('retry');
 
   const state = Math.random().toString(36).substring(2);
   const params = new URLSearchParams({
@@ -9,7 +10,7 @@ export async function GET(req) {
     redirect_uri: redirectUri,
     state,
     scope: 'profile openid',
-    prompt: 'none',
+    prompt: retry ? 'consent' : 'none',
   });
 
   return Response.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
