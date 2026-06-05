@@ -184,7 +184,7 @@ export default function Home() {
       <nav className={styles.nav}>
         <button className={page === 'draw' ? styles.navActive : ''} onClick={() => setPage('draw')}>🎁 สุ่มรางวัล</button>
         {isAdmin && (
-          <button className={page === 'admin' ? styles.navActive : ''} onClick={() => { setPage('admin'); fetchStats(); }}>📊 Admin</button>
+          <button className={page === 'admin' ? styles.navActive : ''} onClick={() => setPage('admin')}>📊 Admin</button>
         )}
       </nav>
 
@@ -301,6 +301,21 @@ export default function Home() {
         <div className={styles.adminPage}>
           <h2>Admin panel</h2>
 
+          <div className={styles.card}>
+            <h3>เข้าสู่ระบบ Admin</h3>
+            <input
+              type="password"
+              className={styles.input}
+              placeholder="Admin password"
+              value={adminPass}
+              onChange={e => setAdminPass(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchStats()}
+            />
+            <button className={styles.drawBtn} style={{ marginTop: 8 }} onClick={fetchStats}>
+              🔍 โหลดข้อมูล
+            </button>
+          </div>
+
           {stats && (
             <>
               <div className={styles.metricGrid}>
@@ -335,13 +350,6 @@ export default function Home() {
           <div className={styles.card}>
             <h3>รีเซ็ตระบบ</h3>
             <p className={styles.muted}>ลบข้อมูลทั้งหมด — LINE UID, Rate Limit, และโค้ดที่แจกไป</p>
-            <input
-              type="password"
-              className={styles.input}
-              placeholder="Admin password"
-              value={adminPass}
-              onChange={e => setAdminPass(e.target.value)}
-            />
             {!confirmReset
               ? <button className={styles.dangerBtn} onClick={() => setConfirmReset(true)}>🔄 รีเซ็ตทั้งหมด</button>
               : <div className={styles.confirmBox}>
