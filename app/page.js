@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
 const CHARS = '0123456789ABCDEF';
+const LIFF_ID = '2010302726-y4s7npkl';
 
 export default function Home() {
   const [page, setPage] = useState('draw');
@@ -17,30 +18,45 @@ export default function Home() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
   const [retryAfter, setRetryAfter] = useState(0);
-
-  // Line user state
-  const [lineUser, setLineUser] = useState(null); // { uid, name, pic }
+  const [lineUser, setLineUser] = useState(null);
+  const [liffReady, setLiffReady] = useState(false);
 
   useEffect(() => {
     fetchProgress();
+
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === '1') setIsAdmin(true);
 
-    // รับข้อมูล Line จาก callback
-    const uid = params.get('uid');
-    const name = params.get('name');
-    const pic = params.get('pic');
-    if (uid && name) {
-      setLineUser({ uid, name, pic });
-      // ล้าง URL params ออก
-      window.history.replaceState({}, '', '/');
-    }
+    // Init LIFF
+    const liff = window.liff;
+    if (!liff) return;
 
-    if (params.get('auth') === 'failed') {
-      setStatus('auth_failed');
-      window.history.replaceState({}, '', '/');
-    }
+    liff.init({ liffId: LIFF_ID })
+      .then(() => {
+        setLiffReady(true);
+        if (liff.isLoggedIn()) {
+          liff.getProfile().then(profile => {
+            setLineUser({
+              uid: profile.userId,
+              name: profile.displayName,
+              pic: profile.pictureUrl || '',
+            });
+          });
+        }
+      })
+      .catch(err => {
+        console.error('LIFF init failed', err);
+        setLiffReady(true); // ยังแสดงหน้าได้ แต่ login ไม่ได้
+      });
   }, []);
+
+  function handleLineLogin() {
+    const liff = window.liff;
+    if (!liff || !liffReady) return;
+    if (!liff.isLoggedIn()) {
+      liff.login();
+    }
+  }
 
   async function fetchProgress() {
     try {
@@ -161,27 +177,16 @@ export default function Home() {
               )}
             </div>
 
-            {/* ยังไม่ได้ login */}
-            {!lineUser && status !== 'auth_failed' && (
+            {!lineUser && (
               <div className={styles.loginWrap}>
                 <p className={styles.loginHint}>กรุณาเข้าสู่ระบบด้วย LINE ก่อนสุ่มรางวัล</p>
-                <a href="/api/auth/line" className={styles.lineBtn}>
+                <button onClick={handleLineLogin} className={styles.lineBtn}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 5.96 2 10.8c0 3.27 1.97 6.14 4.96 7.83-.21.78-.76 2.83-.87 3.27-.13.54.2.53.42.39.17-.11 2.76-1.83 3.88-2.57.53.07 1.07.11 1.61.11 5.52 0 10-3.96 10-8.83C22 5.96 17.52 2 12 2z"/></svg>
                   เข้าสู่ระบบด้วย LINE
-                </a>
+                </button>
               </div>
             )}
 
-            {/* auth failed */}
-            {status === 'auth_failed' && (
-              <div className={styles.resultEmpty}>
-                <div className={styles.emoji}>⚠️</div>
-                <p>เข้าสู่ระบบไม่สำเร็จ</p>
-                <a href="/api/auth/line" className={styles.lineBtn} style={{marginTop: 12}}>ลองใหม่</a>
-              </div>
-            )}
-
-            {/* login แล้ว */}
             {lineUser && (
               <div className={styles.userBar}>
                 {lineUser.pic && <img src={lineUser.pic} className={styles.userPic} alt="" />}

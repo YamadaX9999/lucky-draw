@@ -9,7 +9,6 @@ export async function GET(req) {
   }
 
   try {
-    // แลก code เป็น access token
     const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -27,7 +26,6 @@ export async function GET(req) {
       return Response.redirect(`${baseUrl}/?auth=failed`);
     }
 
-    // ดึงข้อมูล profile
     const profileRes = await fetch('https://api.line.me/v2/profile', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
@@ -37,7 +35,6 @@ export async function GET(req) {
       return Response.redirect(`${baseUrl}/?auth=failed`);
     }
 
-    // ส่ง uid + displayName กลับไปหน้าหลักผ่าน URL param
     const params = new URLSearchParams({
       uid: profile.userId,
       name: profile.displayName,
