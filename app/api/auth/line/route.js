@@ -9,6 +9,7 @@ export async function GET(req) {
     redirect_uri: redirectUri,
     state,
     scope: 'profile openid',
+    prompt: 'none',
   });
 
   return Response.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params}`);
