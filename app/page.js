@@ -85,7 +85,7 @@ export default function Home() {
 
   async function fetchStats() {
     try {
-      const r = await fetch('/api/stats');
+      const r = await fetch(`/api/stats?admin_key=${encodeURIComponent(adminPass)}`);
       const d = await r.json();
       setStats(d);
       setProgress({ used: d.used, total: d.total });
