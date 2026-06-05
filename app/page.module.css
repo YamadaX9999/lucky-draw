@@ -1,25 +1,5 @@
-/* ── RESET & BASE ── */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --red:      #c0152a;
-  --red-deep: #8b0010;
-  --red-glow: #ff1a35;
-  --gold:     #f5c518;
-  --gold-dim: #c9922a;
-  --gold-light: #ffe566;
-  --orange:   #f07020;
-  --bg:       #0d0000;
-  --bg2:      #1a0005;
-  --card-bg:  rgba(20,2,6,0.85);
-  --border:   rgba(245,197,24,0.35);
-  --text:     #fff8e7;
-  --muted:    rgba(255,248,231,0.5);
-}
-
 /* ── LAYOUT ── */
 .main {
-  font-family: 'Sarabun', 'Noto Sans Thai', system-ui, sans-serif;
   min-height: 100vh;
   background: var(--bg);
   background-image:
@@ -86,7 +66,6 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 4px;
-  text-shadow: none;
   filter: drop-shadow(0 0 8px rgba(245,197,24,0.4));
 }
 .header p { font-size: 14px; color: var(--muted); }
@@ -241,7 +220,6 @@
   transition: border 0.2s;
   font-family: inherit;
 }
-.phoneInput::placeholder { color: rgba(255,248,231,0.3); }
 .phoneInput:focus { border-color: var(--gold-dim); box-shadow: 0 0 0 3px rgba(245,197,24,0.1); }
 .phoneInputError { border-color: var(--red-glow) !important; }
 .phoneError { font-size: 12px; color: #ff6b6b; margin-top: 4px; }
@@ -298,7 +276,6 @@
   margin-bottom: 10px;
   font-family: inherit;
 }
-.input::placeholder { color: rgba(255,248,231,0.3); }
 
 .dangerBtn {
   padding: 9px 18px;
