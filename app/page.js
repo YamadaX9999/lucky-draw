@@ -1,13 +1,15 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
 const CHARS = '0123456789ABCDEF';
 
 export default function Home() {
   const [page, setPage] = useState('draw');
-  const [status, setStatus] = useState('idle'); // idle | spinning | won | lost | empty | already
+  const [status, setStatus] = useState('idle');
   const [code, setCode] = useState('');
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [drums, setDrums] = useState(Array(12).fill('?'));
   const [progress, setProgress] = useState({ used: 0, total: 498 });
   const [stats, setStats] = useState(null);
@@ -15,6 +17,7 @@ export default function Home() {
   const [resetMsg, setResetMsg] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [alreadyBy, setAlreadyBy] = useState('');
 
   useEffect(() => { fetchProgress(); }, []);
 
@@ -48,20 +51,39 @@ export default function Home() {
     }
   }
 
+  function validatePhone(val) {
+    const clean = val.replace(/[-\s]/g, '');
+    return /^0[0-9]{8,9}$/.test(clean);
+  }
+
   async function doDraw() {
+    setPhoneError('');
+    if (!validatePhone(phone)) {
+      setPhoneError('กรุณากรอกเบอร์โทรให้ถูกต้อง (เช่น 0812345678)');
+      return;
+    }
     if (status === 'spinning') return;
     setStatus('spinning');
     setCode('');
     try {
-      const r = await fetch('/api/draw', { method: 'POST' });
+      const r = await fetch('/api/draw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
       const d = await r.json();
+
       if (d.status === 'won' || d.status === 'already_drawn') {
         await animateDrums(d.code);
         setCode(d.code);
+        setAlreadyBy(d.by || '');
         setStatus(d.status === 'already_drawn' ? 'already' : 'won');
       } else if (d.status === 'empty') {
         setStatus('empty');
         setDrums(Array(12).fill('-'));
+      } else if (d.status === 'invalid_phone') {
+        setPhoneError('กรุณากรอกเบอร์โทรให้ถูกต้อง');
+        setStatus('idle');
       } else {
         setStatus('idle');
       }
@@ -79,11 +101,12 @@ export default function Home() {
     });
     const d = await r.json();
     if (d.status === 'ok') {
-      setResetMsg('รีเซ็ตสำเร็จแล้ว');
+      setResetMsg('✅ รีเซ็ตสำเร็จแล้ว');
       setConfirmReset(false);
+      setStats(null);
       fetchStats();
     } else {
-      setResetMsg('รหัสผ่านไม่ถูกต้อง');
+      setResetMsg('❌ รหัสผ่านไม่ถูกต้อง');
     }
   }
 
@@ -95,7 +118,9 @@ export default function Home() {
   }
 
   const pct = progress.total > 0 ? (progress.used / progress.total) * 100 : 0;
-  const drumDisplay = drums.slice(0, 4).join('') + '-' + drums.slice(4, 8).join('') + '-' + drums.slice(8, 12).join('');
+  const drumStr = [
+    ...drums.slice(0, 4), '-', ...drums.slice(4, 8), '-', ...drums.slice(8, 12)
+  ];
 
   return (
     <main className={styles.main}>
@@ -108,27 +133,48 @@ export default function Home() {
         <div className={styles.drawPage}>
           <div className={styles.header}>
             <h1>🎁 สุ่มรับโค้ดรางวัล</h1>
-            <p>กดปุ่มด้านล่างเพื่อลุ้นรับโค้ด</p>
+            <p>กรอกเบอร์โทรและกดสุ่มเพื่อลุ้นรับโค้ด</p>
           </div>
 
           <div className={styles.card}>
             <div className={styles.drumRow}>
-              {drumDisplay.split('').map((ch, i) =>
+              {drumStr.map((ch, i) =>
                 ch === '-'
                   ? <span key={i} className={styles.sep}>-</span>
                   : <div key={i} className={`${styles.drum} ${status === 'spinning' ? styles.drumSpin : ''}`}>{ch}</div>
               )}
             </div>
 
+            {status === 'idle' || status === 'spinning' ? (
+              <div className={styles.phoneWrap}>
+                <label className={styles.phoneLabel}>เบอร์โทรศัพท์</label>
+                <input
+                  className={`${styles.phoneInput} ${phoneError ? styles.phoneInputError : ''}`}
+                  type="tel"
+                  placeholder="0812345678"
+                  value={phone}
+                  maxLength={10}
+                  onChange={e => { setPhone(e.target.value); setPhoneError(''); }}
+                  disabled={status === 'spinning'}
+                />
+                {phoneError && <p className={styles.phoneError}>{phoneError}</p>}
+              </div>
+            ) : null}
+
             {(status === 'won' || status === 'already') && code && (
               <div className={styles.resultWon}>
                 <div className={styles.emoji}>🎉</div>
                 <p className={styles.wonTitle}>ยินดีด้วย! คุณได้รับรางวัล</p>
                 <div className={styles.codeBox}>{code}</div>
+                <br />
                 <button className={styles.copyBtn} onClick={copyCode}>
                   {copied ? '✓ คัดลอกแล้ว!' : '📋 คัดลอกโค้ด'}
                 </button>
-                {status === 'already' && <p className={styles.note}>คุณได้ทำการสุ่มไปแล้วก่อนหน้านี้</p>}
+                {status === 'already' && (
+                  <p className={styles.note}>
+                    {alreadyBy === 'ip' ? '⚠️ IP นี้เคยสุ่มไปแล้ว' : '⚠️ เบอร์นี้เคยสุ่มไปแล้ว'}
+                  </p>
+                )}
               </div>
             )}
 
@@ -140,13 +186,15 @@ export default function Home() {
               </div>
             )}
 
-            <button
-              className={styles.drawBtn}
-              onClick={doDraw}
-              disabled={status === 'spinning' || status === 'empty'}
-            >
-              {status === 'spinning' ? 'กำลังสุ่ม...' : '✨ กดสุ่มรางวัล'}
-            </button>
+            {status !== 'won' && status !== 'already' && status !== 'empty' && (
+              <button
+                className={styles.drawBtn}
+                onClick={doDraw}
+                disabled={status === 'spinning'}
+              >
+                {status === 'spinning' ? 'กำลังสุ่ม...' : '✨ กดสุ่มรางวัล'}
+              </button>
+            )}
 
             <div className={styles.progressWrap}>
               <div className={styles.progressLabel}>
@@ -174,15 +222,17 @@ export default function Home() {
               </div>
 
               <div className={styles.card}>
-                <h3>IP ที่เคยสุ่ม (30 ล่าสุด)</h3>
-                {stats.ipList.length === 0
+                <h3>ประวัติการสุ่ม (30 ล่าสุด)</h3>
+                {!stats.logs || stats.logs.length === 0
                   ? <p className={styles.muted}>ยังไม่มีข้อมูล</p>
-                  : stats.ipList.slice().reverse().map((item, i) => (
+                  : stats.logs.map((item, i) => (
                     <div key={i} className={styles.ipRow}>
-                      <span className={styles.ipAddr}>{item.ip}</span>
-                      {item.code
-                        ? <span className={`${styles.tag} ${styles.tagSuccess}`}>{item.code}</span>
-                        : <span className={`${styles.tag} ${styles.tagDanger}`}>ไม่ได้รับ</span>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'monospace', fontSize: 13 }}>📱 {item.phone}</div>
+                        <div style={{ fontSize: 11, color: '#999' }}>🌐 {item.ip}</div>
+                        <div style={{ fontSize: 11, color: '#999' }}>{new Date(item.time).toLocaleString('th-TH')}</div>
+                      </div>
+                      <span className={`${styles.tag} ${styles.tagSuccess}`}>{item.code}</span>
                     </div>
                   ))
                 }
@@ -192,7 +242,7 @@ export default function Home() {
 
           <div className={styles.card}>
             <h3>รีเซ็ตระบบ</h3>
-            <p className={styles.muted}>ลบข้อมูล IP และโค้ดที่แจกทั้งหมด</p>
+            <p className={styles.muted}>ลบข้อมูลทั้งหมด — เบอร์, IP, และโค้ดที่แจกไป</p>
             <input
               type="password"
               className={styles.input}

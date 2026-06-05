@@ -9,13 +9,17 @@ export async function POST(req) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const ipKeys = await redis.keys('ip:*');
-    for (const key of ipKeys) {
+    const [phoneKeys, ipKeys] = await Promise.all([
+      redis.keys('phone:*'),
+      redis.keys('ip:*'),
+    ]);
+
+    const allKeys = [...phoneKeys, ...ipKeys, 'used_codes', 'draw_log'];
+    for (const key of allKeys) {
       await redis.del(key);
     }
-    await redis.del('used_codes');
 
-    return Response.json({ status: 'ok', message: 'Reset complete' });
+    return Response.json({ status: 'ok' });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }

@@ -6,21 +6,18 @@ const redis = Redis.fromEnv();
 export async function GET() {
   try {
     const usedCount = await redis.llen('used_codes');
-    const usedCodes = usedCount > 0 ? await redis.lrange('used_codes', 0, -1) : [];
+    const logCount = await redis.llen('draw_log');
+    const logs = logCount > 0 ? await redis.lrange('draw_log', 0, 29) : [];
 
-    const ipKeys = await redis.keys('ip:*');
-    const ipList = [];
-    for (const key of ipKeys.slice(-30)) {
-      const code = await redis.get(key);
-      ipList.push({ ip: key.replace('ip:', ''), code });
-    }
+    const parsedLogs = logs.map(l => {
+      try { return typeof l === 'string' ? JSON.parse(l) : l; } catch { return null; }
+    }).filter(Boolean);
 
     return Response.json({
       total: CODES.length,
       used: usedCount,
       remaining: CODES.length - usedCount,
-      usedCodes,
-      ipList,
+      logs: parsedLogs,
     });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
