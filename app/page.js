@@ -94,6 +94,7 @@ export default function Home() {
       const r = await fetch('/api/stats', {
         headers: { 'x-admin-key': key },
       });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       setStats(d);
       setProgress({ used: d.used, total: d.total });
@@ -151,6 +152,11 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accessToken }),
       });
+      if (!r.ok && r.status !== 401 && r.status !== 429) {
+        setStatus('idle');
+        fetchProgress();
+        return;
+      }
       const d = await r.json();
 
       if (d.status === 'won' || d.status === 'already_drawn') {
@@ -176,21 +182,29 @@ export default function Home() {
   }
 
   async function doReset() {
-    const r = await fetch('/api/reset', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': adminPass,
-      },
-    });
-    const d = await r.json();
-    if (d.status === 'ok') {
-      setResetMsg('✅ รีเซ็ตสำเร็จแล้ว');
-      setConfirmReset(false);
-      setStats(null);
-      fetchStats();
-    } else {
-      setResetMsg('❌ รหัสผ่านไม่ถูกต้อง');
+    try {
+      const r = await fetch('/api/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminPass,
+        },
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setResetMsg(r.status === 429 ? '⏳ ลองใหม่ภายหลัง' : '❌ รหัสผ่านไม่ถูกต้อง');
+        return;
+      }
+      if (d.status === 'ok') {
+        setResetMsg('✅ รีเซ็ตสำเร็จแล้ว');
+        setConfirmReset(false);
+        setStats(null);
+        fetchStats();
+      } else {
+        setResetMsg('❌ เกิดข้อผิดพลาด');
+      }
+    } catch {
+      setResetMsg('❌ ไม่สามารถเชื่อมต่อได้');
     }
   }
 
@@ -201,7 +215,8 @@ export default function Home() {
         headers: { 'x-admin-key': adminPass },
       });
       if (!r.ok) {
-        alert('Export ไม่สำเร็จ: ' + r.status);
+        const msg = r.status === 401 ? 'รหัสผ่านไม่ถูกต้อง' : r.status === 429 ? 'ลองใหม่ภายหลัง' : `เกิดข้อผิดพลาด (${r.status})`;
+        alert('Export ไม่สำเร็จ: ' + msg);
         return;
       }
       const blob = await r.blob();

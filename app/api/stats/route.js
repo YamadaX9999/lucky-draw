@@ -3,6 +3,7 @@ import { Redis } from '@upstash/redis';
 const redis = Redis.fromEnv();
 
 const DISPLAY_TOTAL = 1000;
+const LOG_CAP = 1000;
 
 function getAdminKey(req) {
   return req.headers.get('x-admin-key') || '';
@@ -28,17 +29,11 @@ export async function GET(req) {
       });
     }
 
-    // ดึง log ทั้งหมด (cap ไว้ที่ 1000 รายการ)
-    const logCount = await redis.llen('draw_log');
-    const logs = logCount > 0 ? await redis.lrange('draw_log', 0, 999) : [];
+    // อ่านแค่ LOG_CAP รายการ — list ถูก cap ตั้งแต่ตอนเขียนแล้ว ไม่ต้อง LTRIM ที่นี่
+    const logs = await redis.lrange('draw_log', 0, LOG_CAP - 1);
     const parsedLogs = logs.map(l => {
       try { return typeof l === 'string' ? JSON.parse(l) : l; } catch { return null; }
     }).filter(Boolean);
-
-    // ltrim: เก็บไว้แค่ 1000 รายการล่าสุด ป้องกัน list โตไม่หยุด
-    if (logCount > 1000) {
-      await redis.ltrim('draw_log', 0, 999);
-    }
 
     return Response.json({
       total: DISPLAY_TOTAL,

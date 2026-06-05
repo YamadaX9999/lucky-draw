@@ -4,6 +4,7 @@ import { CODES } from '../../../lib/codes';
 
 const redis = Redis.fromEnv();
 
+// Rate limit เฉพาะ request ที่ผ่าน auth แล้ว — ป้องกัน admin จริงโดนบล็อก
 const resetRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(5, '15 m'),
@@ -12,19 +13,20 @@ const resetRatelimit = new Ratelimit({
 
 export async function POST(req) {
   try {
+    // ตรวจ auth ก่อนเสมอ — ป้องกันไม่ให้คนยิง request มั่วเผา rate limit quota
+    const adminKey = req.headers.get('x-admin-key') || '';
+    if (adminKey !== process.env.ADMIN_PASSWORD) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit หลังจากผ่าน auth แล้ว — ป้องกัน admin คลิก reset ซ้ำเร็วเกิน
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     const { success } = await resetRatelimit.limit(ip);
     if (!success) {
       return Response.json({ error: 'Too many attempts. Try again later.' }, { status: 429 });
     }
 
-    // ใช้ header แทน body สำหรับ password
-    const adminKey = req.headers.get('x-admin-key') || '';
-    if (adminKey !== process.env.ADMIN_PASSWORD) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const keyPatterns = ['line:*', 'rl:*', 'rl:uid:*', 'rl:ip:*', 'rl:reset:*', '@upstash/ratelimit:*'];
+    const keyPatterns = ['line:*', 'rl:uid:*', 'rl:ip:*', 'rl:reset:*', '@upstash/ratelimit:*'];
     for (const pattern of keyPatterns) {
       let cursor = 0;
       do {

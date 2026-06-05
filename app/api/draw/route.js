@@ -3,14 +3,12 @@ import { Ratelimit } from '@upstash/ratelimit';
 
 const redis = Redis.fromEnv();
 
-// Rate limit ต่อ UID (1 ครั้ง / 24 ชม.)
 const uidRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(1, '24 h'),
   prefix: 'rl:uid',
 });
 
-// Rate limit ต่อ IP (3 ครั้ง / 24 ชม.)
 const ipRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(3, '24 h'),
@@ -35,6 +33,21 @@ async function getVerifiedProfile(accessToken) {
 
   return profile;
 }
+
+// Lua script: atomic SPOP → SET line:uid → LPUSH draw_log → LTRIM draw_log
+// ถ้าขั้นตอนใดล้มเหลว Redis จะ rollback ทั้งหมด (Lua script รันแบบ atomic)
+// KEYS[1] = code_pool, KEYS[2] = uid_key (line:uid), KEYS[3] = draw_log
+// ARGV[1] = log entry JSON, ARGV[2] = log cap size
+const DRAW_SCRIPT = `
+local code = redis.call('SPOP', KEYS[1])
+if not code then return {err='empty'} end
+redis.call('SET', KEYS[2], code)
+redis.call('LPUSH', KEYS[3], ARGV[1])
+redis.call('LTRIM', KEYS[3], 0, tonumber(ARGV[2]) - 1)
+return code
+`;
+
+const LOG_CAP = 1000;
 
 export async function POST(req) {
   try {
@@ -72,16 +85,19 @@ export async function POST(req) {
       return Response.json({ status: 'rate_limited', retryAfter: retryAfterHrs });
     }
 
-    // SPOP: สุ่มเลือกและลบออกจาก pool ในคำสั่งเดียว → atomic 100% ไม่มี race condition
-    const code = await redis.spop('code_pool');
-    if (!code) {
+    // Atomic: SPOP + SET + LPUSH + LTRIM ในคำสั่งเดียว ผ่าน Lua script
+    const logEntry = JSON.stringify({ uid, time: Date.now() });
+    const result = await redis.eval(
+      DRAW_SCRIPT,
+      ['code_pool', `line:${uid}`, 'draw_log'],
+      [logEntry, String(LOG_CAP)]
+    );
+
+    if (!result || result?.err === 'empty') {
       return Response.json({ status: 'empty' });
     }
 
-    // บันทึก UID → code และ log
-    await redis.set(`line:${uid}`, code);
-    await redis.lpush('draw_log', JSON.stringify({ uid, code, time: Date.now() }));
-
+    const code = String(result);
     return Response.json({ status: 'won', code });
   } catch (err) {
     console.error(err);
