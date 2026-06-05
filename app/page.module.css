@@ -311,3 +311,52 @@
   color: #ff8080;
 }
 .resetMsg { margin-top: 10px; font-size: 13px; color: var(--gold); }
+
+/* ── LINE LOGIN ── */
+.loginWrap {
+  text-align: center;
+  padding: 8px 0 16px;
+}
+.loginHint {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.lineBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: #06C755;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(6,199,85,0.35);
+}
+.lineBtn:hover { background: #05b34c; transform: translateY(-1px); }
+
+.userBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(6,199,85,0.1);
+  border: 1px solid rgba(6,199,85,0.25);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.userPic {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.userName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #06C755;
+}

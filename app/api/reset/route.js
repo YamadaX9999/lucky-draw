@@ -9,12 +9,14 @@ export async function POST(req) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const [phoneKeys, ipKeys] = await Promise.all([
+    const [lineKeys, rlKeys, phoneKeys, ipKeys] = await Promise.all([
+      redis.keys('line:*'),
+      redis.keys('rl:*'),
       redis.keys('phone:*'),
       redis.keys('ip:*'),
     ]);
 
-    const allKeys = [...phoneKeys, ...ipKeys, 'used_codes', 'draw_log'];
+    const allKeys = [...lineKeys, ...rlKeys, ...phoneKeys, ...ipKeys, 'used_codes', 'draw_log'];
     for (const key of allKeys) {
       await redis.del(key);
     }

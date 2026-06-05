@@ -9,8 +9,6 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [status, setStatus] = useState('idle');
   const [code, setCode] = useState('');
-  const [phone, setPhone] = useState('');
-  const [phoneError, setPhoneError] = useState('');
   const [drums, setDrums] = useState(Array(12).fill('?'));
   const [progress, setProgress] = useState({ used: 0, total: 1000 });
   const [stats, setStats] = useState(null);
@@ -18,14 +16,30 @@ export default function Home() {
   const [resetMsg, setResetMsg] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [alreadyBy, setAlreadyBy] = useState('');
   const [retryAfter, setRetryAfter] = useState(0);
+
+  // Line user state
+  const [lineUser, setLineUser] = useState(null); // { uid, name, pic }
 
   useEffect(() => {
     fetchProgress();
-    // ซ่อนแท็บ Admin — เข้าได้ผ่าน /?admin=1
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === '1') setIsAdmin(true);
+
+    // รับข้อมูล Line จาก callback
+    const uid = params.get('uid');
+    const name = params.get('name');
+    const pic = params.get('pic');
+    if (uid && name) {
+      setLineUser({ uid, name, pic });
+      // ล้าง URL params ออก
+      window.history.replaceState({}, '', '/');
+    }
+
+    if (params.get('auth') === 'failed') {
+      setStatus('auth_failed');
+      window.history.replaceState({}, '', '/');
+    }
   }, []);
 
   async function fetchProgress() {
@@ -58,17 +72,8 @@ export default function Home() {
     }
   }
 
-  function validatePhone(val) {
-    const clean = val.replace(/[-\s]/g, '');
-    return /^0[0-9]{8,9}$/.test(clean);
-  }
-
   async function doDraw() {
-    setPhoneError('');
-    if (!validatePhone(phone)) {
-      setPhoneError('กรุณากรอกเบอร์โทรให้ถูกต้อง (เช่น 0812345678)');
-      return;
-    }
+    if (!lineUser) return;
     if (status === 'spinning') return;
     setStatus('spinning');
     setCode('');
@@ -76,14 +81,13 @@ export default function Home() {
       const r = await fetch('/api/draw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ uid: lineUser.uid }),
       });
       const d = await r.json();
 
       if (d.status === 'won' || d.status === 'already_drawn') {
         await animateDrums(d.code);
         setCode(d.code);
-        setAlreadyBy(d.by || '');
         setStatus(d.status === 'already_drawn' ? 'already' : 'won');
       } else if (d.status === 'rate_limited') {
         setRetryAfter(d.retryAfter || 24);
@@ -92,9 +96,6 @@ export default function Home() {
       } else if (d.status === 'empty') {
         setStatus('empty');
         setDrums(Array(12).fill('-'));
-      } else if (d.status === 'invalid_phone') {
-        setPhoneError('กรุณากรอกเบอร์โทรให้ถูกต้อง');
-        setStatus('idle');
       } else {
         setStatus('idle');
       }
@@ -136,6 +137,7 @@ export default function Home() {
   return (
     <main className={styles.main}>
       <img src="/banner.jpg" alt="banner" className={styles.banner} />
+
       <nav className={styles.nav}>
         <button className={page === 'draw' ? styles.navActive : ''} onClick={() => setPage('draw')}>🎁 สุ่มรางวัล</button>
         {isAdmin && (
@@ -147,7 +149,7 @@ export default function Home() {
         <div className={styles.drawPage}>
           <div className={styles.header}>
             <h1>🎁 สุ่มรับโค้ดรางวัล</h1>
-            <p>กรอกเบอร์โทรและกดสุ่มเพื่อลุ้นรับโค้ด</p>
+            <p>เข้าสู่ระบบด้วย LINE เพื่อลุ้นรับโค้ด</p>
           </div>
 
           <div className={styles.card}>
@@ -159,21 +161,33 @@ export default function Home() {
               )}
             </div>
 
-            {status === 'idle' || status === 'spinning' ? (
-              <div className={styles.phoneWrap}>
-                <label className={styles.phoneLabel}>เบอร์โทรศัพท์</label>
-                <input
-                  className={`${styles.phoneInput} ${phoneError ? styles.phoneInputError : ''}`}
-                  type="tel"
-                  placeholder="0812345678"
-                  value={phone}
-                  maxLength={10}
-                  onChange={e => { setPhone(e.target.value); setPhoneError(''); }}
-                  disabled={status === 'spinning'}
-                />
-                {phoneError && <p className={styles.phoneError}>{phoneError}</p>}
+            {/* ยังไม่ได้ login */}
+            {!lineUser && status !== 'auth_failed' && (
+              <div className={styles.loginWrap}>
+                <p className={styles.loginHint}>กรุณาเข้าสู่ระบบด้วย LINE ก่อนสุ่มรางวัล</p>
+                <a href="/api/auth/line" className={styles.lineBtn}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 5.96 2 10.8c0 3.27 1.97 6.14 4.96 7.83-.21.78-.76 2.83-.87 3.27-.13.54.2.53.42.39.17-.11 2.76-1.83 3.88-2.57.53.07 1.07.11 1.61.11 5.52 0 10-3.96 10-8.83C22 5.96 17.52 2 12 2z"/></svg>
+                  เข้าสู่ระบบด้วย LINE
+                </a>
               </div>
-            ) : null}
+            )}
+
+            {/* auth failed */}
+            {status === 'auth_failed' && (
+              <div className={styles.resultEmpty}>
+                <div className={styles.emoji}>⚠️</div>
+                <p>เข้าสู่ระบบไม่สำเร็จ</p>
+                <a href="/api/auth/line" className={styles.lineBtn} style={{marginTop: 12}}>ลองใหม่</a>
+              </div>
+            )}
+
+            {/* login แล้ว */}
+            {lineUser && (
+              <div className={styles.userBar}>
+                {lineUser.pic && <img src={lineUser.pic} className={styles.userPic} alt="" />}
+                <span className={styles.userName}>{lineUser.name}</span>
+              </div>
+            )}
 
             {(status === 'won' || status === 'already') && code && (
               <div className={styles.resultWon}>
@@ -185,9 +199,7 @@ export default function Home() {
                   {copied ? '✓ คัดลอกแล้ว!' : '📋 คัดลอกโค้ด'}
                 </button>
                 {status === 'already' && (
-                  <p className={styles.note}>
-                    {alreadyBy === 'ip' ? '⚠️ IP นี้เคยสุ่มไปแล้ว' : '⚠️ เบอร์นี้เคยสุ่มไปแล้ว'}
-                  </p>
+                  <p className={styles.note}>⚠️ บัญชี LINE นี้เคยสุ่มไปแล้ว</p>
                 )}
               </div>
             )}
@@ -208,7 +220,7 @@ export default function Home() {
               </div>
             )}
 
-            {status !== 'won' && status !== 'already' && status !== 'empty' && status !== 'rate_limited' && (
+            {lineUser && status !== 'won' && status !== 'already' && status !== 'empty' && status !== 'rate_limited' && (
               <button
                 className={styles.drawBtn}
                 onClick={doDraw}
@@ -255,8 +267,7 @@ export default function Home() {
                   : stats.logs.map((item, i) => (
                     <div key={i} className={styles.ipRow}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: 'monospace', fontSize: 13 }}>📱 {item.phone}</div>
-                        <div style={{ fontSize: 11, color: '#999' }}>🌐 {item.ip}</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 13 }}>👤 {item.uid}</div>
                         <div style={{ fontSize: 11, color: '#999' }}>{new Date(item.time).toLocaleString('th-TH')}</div>
                       </div>
                       <span className={`${styles.tag} ${styles.tagSuccess}`}>{item.code}</span>
@@ -269,7 +280,7 @@ export default function Home() {
 
           <div className={styles.card}>
             <h3>รีเซ็ตระบบ</h3>
-            <p className={styles.muted}>ลบข้อมูลทั้งหมด — เบอร์, IP, และโค้ดที่แจกไป</p>
+            <p className={styles.muted}>ลบข้อมูลทั้งหมด — LINE UID, Rate Limit, และโค้ดที่แจกไป</p>
             <input
               type="password"
               className={styles.input}
