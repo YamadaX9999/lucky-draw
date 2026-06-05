@@ -37,13 +37,14 @@ async function getVerifiedProfile(accessToken) {
 // Lua script: atomic SPOP → SET line:uid → LPUSH draw_log → LTRIM draw_log
 // ถ้าขั้นตอนใดล้มเหลว Redis จะ rollback ทั้งหมด (Lua script รันแบบ atomic)
 // KEYS[1] = code_pool, KEYS[2] = uid_key (line:uid), KEYS[3] = draw_log
-// ARGV[1] = log entry JSON, ARGV[2] = log cap size
+// ARGV[1] = uid, ARGV[2] = timestamp, ARGV[3] = log cap size
 const DRAW_SCRIPT = `
 local code = redis.call('SPOP', KEYS[1])
 if not code then return {err='empty'} end
 redis.call('SET', KEYS[2], code)
-redis.call('LPUSH', KEYS[3], ARGV[1])
-redis.call('LTRIM', KEYS[3], 0, tonumber(ARGV[2]) - 1)
+local log = cjson.encode({uid=ARGV[1], code=code, time=tonumber(ARGV[2])})
+redis.call('LPUSH', KEYS[3], log)
+redis.call('LTRIM', KEYS[3], 0, tonumber(ARGV[3]) - 1)
 return code
 `;
 
@@ -86,11 +87,10 @@ export async function POST(req) {
     }
 
     // Atomic: SPOP + SET + LPUSH + LTRIM ในคำสั่งเดียว ผ่าน Lua script
-    const logEntry = JSON.stringify({ uid, time: Date.now() });
     const result = await redis.eval(
       DRAW_SCRIPT,
       ['code_pool', `line:${uid}`, 'draw_log'],
-      [logEntry, String(LOG_CAP)]
+      [uid, String(Date.now()), String(LOG_CAP)]
     );
 
     if (!result || result?.err === 'empty') {
