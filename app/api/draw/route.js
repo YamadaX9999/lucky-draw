@@ -1,6 +1,5 @@
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
-import { CODES } from '../../../lib/codes';
 
 const redis = Redis.fromEnv();
 
@@ -18,19 +17,19 @@ const ipRatelimit = new Ratelimit({
   prefix: 'rl:ip',
 });
 
-// ดึง profile + verify token ในครั้งเดียว
 async function getVerifiedProfile(accessToken) {
-  const profileRes = await fetch('https://api.line.me/v2/profile', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!profileRes.ok) return null;
-  const profile = await profileRes.json();
-  if (!profile.userId) return null;
+  const [profileRes, verifyRes] = await Promise.all([
+    fetch('https://api.line.me/v2/profile', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
+    fetch(`https://api.line.me/oauth2/v2.1/verify?access_token=${accessToken}`),
+  ]);
 
-  // verify ว่า token ออกจาก channel ของเรา
-  const verifyRes = await fetch(`https://api.line.me/oauth2/v2.1/verify?access_token=${accessToken}`);
-  if (!verifyRes.ok) return null;
-  const tokenInfo = await verifyRes.json();
+  if (!profileRes.ok || !verifyRes.ok) return null;
+
+  const [profile, tokenInfo] = await Promise.all([profileRes.json(), verifyRes.json()]);
+
+  if (!profile.userId) return null;
   if (tokenInfo.client_id !== process.env.LINE_CHANNEL_ID) return null;
   if (tokenInfo.expires_in <= 0) return null;
 
@@ -45,7 +44,6 @@ export async function POST(req) {
       return Response.json({ status: 'unauthorized' }, { status: 401 });
     }
 
-    // verify token + ดึง profile
     const profile = await getVerifiedProfile(accessToken);
     if (!profile) {
       return Response.json({ status: 'unauthorized' }, { status: 401 });
@@ -53,8 +51,7 @@ export async function POST(req) {
 
     const uid = profile.userId;
 
-    // เช็ค already_drawn ก่อน rate limit เลย
-    // เพื่อให้คนที่สุ่มไปแล้วดูโค้ดตัวเองได้โดยไม่กระทบ rate limit
+    // เช็ค already_drawn ก่อน rate limit เพื่อไม่กินโควต้า
     const existingCode = await redis.get(`line:${uid}`);
     if (existingCode !== null && existingCode !== undefined) {
       return Response.json({ status: 'already_drawn', code: existingCode });
@@ -75,34 +72,14 @@ export async function POST(req) {
       return Response.json({ status: 'rate_limited', retryAfter: retryAfterHrs });
     }
 
-    // ดึงโค้ดที่ใช้ไปแล้ว
-    const usedCount = await redis.llen('used_codes');
-    if (usedCount >= CODES.length) {
+    // SPOP: สุ่มเลือกและลบออกจาก pool ในคำสั่งเดียว → atomic 100% ไม่มี race condition
+    const code = await redis.spop('code_pool');
+    if (!code) {
       return Response.json({ status: 'empty' });
     }
 
-    const allUsed = usedCount > 0 ? await redis.lrange('used_codes', 0, -1) : [];
-    const usedSet = new Set(allUsed);
-    const remaining = CODES.filter(c => !usedSet.has(c));
-
-    if (remaining.length === 0) {
-      return Response.json({ status: 'empty' });
-    }
-
-    // เลือกโค้ดแบบ atomic ด้วย Redis transaction
-    // ป้องกัน race condition กรณีหลายคนกดพร้อมกัน
-    const code = remaining[Math.floor(Math.random() * remaining.length)];
-
-    // ใช้ pipeline เพื่อ atomic write
-    // SET NX = set only if not exists ป้องกันโค้ดซ้ำ
-    const setResult = await redis.set(`line:${uid}`, code, { nx: true });
-    if (!setResult) {
-      // มีคนอื่น set ก่อนแล้ว (race condition) ดึงโค้ดที่บันทึกไว้
-      const savedCode = await redis.get(`line:${uid}`);
-      return Response.json({ status: 'already_drawn', code: savedCode });
-    }
-
-    await redis.lpush('used_codes', code);
+    // บันทึก UID → code และ log
+    await redis.set(`line:${uid}`, code);
     await redis.lpush('draw_log', JSON.stringify({ uid, code, time: Date.now() }));
 
     return Response.json({ status: 'won', code });

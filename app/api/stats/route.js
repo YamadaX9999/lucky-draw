@@ -1,5 +1,4 @@
 import { Redis } from '@upstash/redis';
-import { CODES } from '../../../lib/codes';
 
 const redis = Redis.fromEnv();
 
@@ -7,22 +6,24 @@ const DISPLAY_TOTAL = 1000;
 
 export async function GET(req) {
   try {
-    // ตรวจสอบ admin key สำหรับ logs (ข้อมูล sensitive)
-    // stats ทั่วไป (used/total) ยังเปิดให้ดูได้
     const { searchParams } = new URL(req.url);
     const isAdmin = searchParams.get('admin_key') === process.env.ADMIN_PASSWORD;
 
-    const usedCount = await redis.llen('used_codes');
-    const displayUsed = usedCount * 2;
+    // ใช้ SCARD นับโค้ดใน pool (real-time ถูกต้อง 100%)
+    const poolRemaining = await redis.scard('code_pool');
+    const poolTotal = await redis.get('code_pool_total');
+    const realTotal = poolTotal ? parseInt(poolTotal) : 0;
+    const realUsed = realTotal - poolRemaining;
 
-    // ถ้าไม่ใช่ admin ส่งแค่ตัวเลข ไม่ส่ง logs
+    const displayUsed = realUsed * 2;
+
     if (!isAdmin) {
       return Response.json({
         total: DISPLAY_TOTAL,
         used: displayUsed,
         remaining: DISPLAY_TOTAL - displayUsed,
-        realUsed: usedCount,
-        realTotal: CODES.length,
+        realUsed,
+        realTotal,
       });
     }
 
@@ -36,8 +37,8 @@ export async function GET(req) {
       total: DISPLAY_TOTAL,
       used: displayUsed,
       remaining: DISPLAY_TOTAL - displayUsed,
-      realUsed: usedCount,
-      realTotal: CODES.length,
+      realUsed,
+      realTotal,
       logs: parsedLogs,
     });
   } catch (err) {

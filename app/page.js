@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
 const CHARS = '0123456789ABCDEF';
-const LIFF_ID = '2010302726-y4s7npkl';
+const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
 
 export default function Home() {
   const [page, setPage] = useState('draw');

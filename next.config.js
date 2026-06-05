@@ -1,6 +1,3 @@
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-ADMIN_PASSWORD=
-LINE_CHANNEL_ID=
-NEXT_PUBLIC_BASE_URL=https://your-domain.vercel.app
-NEXT_PUBLIC_LIFF_ID=your-liff-id
+/** @type {import('next').NextConfig} */
+const nextConfig = {}
+module.exports = nextConfig
