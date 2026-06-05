@@ -20,6 +20,7 @@ export default function Home() {
   const [retryAfter, setRetryAfter] = useState(0);
   const [lineUser, setLineUser] = useState(null);
   const [liffReady, setLiffReady] = useState(false);
+  const [liffLoading, setLiffLoading] = useState(true);
 
   useEffect(() => {
     fetchProgress();
@@ -27,28 +28,44 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('admin') === '1') setIsAdmin(true);
 
-    // Init LIFF
-    const liff = window.liff;
-    if (!liff) return;
-
-    liff.init({ liffId: LIFF_ID })
-      .then(() => {
-        setLiffReady(true);
-        if (liff.isLoggedIn()) {
-          liff.getProfile().then(profile => {
-            setLineUser({
-              uid: profile.userId,
-              name: profile.displayName,
-              pic: profile.pictureUrl || '',
-            });
-          });
-        }
-      })
-      .catch(err => {
-        console.error('LIFF init failed', err);
-        setLiffReady(true); // ยังแสดงหน้าได้ แต่ login ไม่ได้
-      });
+    initLiff();
   }, []);
+
+  async function initLiff(retryCount = 0) {
+    const liff = window.liff;
+    if (!liff) {
+      // SDK ยังโหลดไม่เสร็จ รอแล้ว retry
+      if (retryCount < 10) {
+        setTimeout(() => initLiff(retryCount + 1), 300);
+      } else {
+        setLiffLoading(false);
+      }
+      return;
+    }
+
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      setLiffReady(true);
+      setLiffLoading(false);
+
+      if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        setLineUser({
+          uid: profile.userId,
+          name: profile.displayName,
+          pic: profile.pictureUrl || '',
+        });
+      }
+    } catch (err) {
+      console.error('LIFF init failed', err);
+      // retry อีกครั้งถ้ายังไม่เกิน 3 ครั้ง
+      if (retryCount < 3) {
+        setTimeout(() => initLiff(retryCount + 1), 1000);
+      } else {
+        setLiffLoading(false);
+      }
+    }
+  }
 
   function handleLineLogin() {
     const liff = window.liff;
@@ -91,13 +108,21 @@ export default function Home() {
   async function doDraw() {
     if (!lineUser) return;
     if (status === 'spinning') return;
+
+    const liff = window.liff;
+    if (!liff || !liff.isLoggedIn()) return;
+
     setStatus('spinning');
     setCode('');
+
     try {
+      // ส่ง accessToken แทน uid ให้ server verify เอง
+      const accessToken = liff.getAccessToken();
+
       const r = await fetch('/api/draw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: lineUser.uid }),
+        body: JSON.stringify({ accessToken }),
       });
       const d = await r.json();
 
@@ -112,6 +137,8 @@ export default function Home() {
       } else if (d.status === 'empty') {
         setStatus('empty');
         setDrums(Array(12).fill('-'));
+      } else if (d.status === 'unauthorized') {
+        setStatus('auth_failed');
       } else {
         setStatus('idle');
       }
@@ -177,16 +204,38 @@ export default function Home() {
               )}
             </div>
 
-            {!lineUser && (
+            {/* กำลังโหลด LIFF */}
+            {liffLoading && (
+              <div className={styles.loginWrap}>
+                <p className={styles.loginHint}>กำลังโหลด...</p>
+              </div>
+            )}
+
+            {/* ยังไม่ได้ login */}
+            {!liffLoading && !lineUser && status !== 'auth_failed' && (
               <div className={styles.loginWrap}>
                 <p className={styles.loginHint}>กรุณาเข้าสู่ระบบด้วย LINE ก่อนสุ่มรางวัล</p>
-                <button onClick={handleLineLogin} className={styles.lineBtn}>
+                <button
+                  onClick={handleLineLogin}
+                  className={styles.lineBtn}
+                  disabled={!liffReady}
+                >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 5.96 2 10.8c0 3.27 1.97 6.14 4.96 7.83-.21.78-.76 2.83-.87 3.27-.13.54.2.53.42.39.17-.11 2.76-1.83 3.88-2.57.53.07 1.07.11 1.61.11 5.52 0 10-3.96 10-8.83C22 5.96 17.52 2 12 2z"/></svg>
                   เข้าสู่ระบบด้วย LINE
                 </button>
               </div>
             )}
 
+            {/* auth failed */}
+            {status === 'auth_failed' && (
+              <div className={styles.resultEmpty}>
+                <div className={styles.emoji}>⚠️</div>
+                <p>เข้าสู่ระบบไม่สำเร็จ</p>
+                <button onClick={handleLineLogin} className={styles.lineBtn} style={{marginTop: 12}}>ลองใหม่</button>
+              </div>
+            )}
+
+            {/* login แล้ว */}
             {lineUser && (
               <div className={styles.userBar}>
                 {lineUser.pic && <img src={lineUser.pic} className={styles.userPic} alt="" />}
@@ -225,7 +274,7 @@ export default function Home() {
               </div>
             )}
 
-            {lineUser && status !== 'won' && status !== 'already' && status !== 'empty' && status !== 'rate_limited' && (
+            {lineUser && status !== 'won' && status !== 'already' && status !== 'empty' && status !== 'rate_limited' && status !== 'auth_failed' && (
               <button
                 className={styles.drawBtn}
                 onClick={doDraw}

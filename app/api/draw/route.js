@@ -4,24 +4,72 @@ import { CODES } from '../../../lib/codes';
 
 const redis = Redis.fromEnv();
 
-const ratelimit = new Ratelimit({
+// Rate limit ต่อ UID (1 ครั้ง / 24 ชม.)
+const uidRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.fixedWindow(1, '24 h'),
-  prefix: 'rl',
+  prefix: 'rl:uid',
 });
+
+// Rate limit ต่อ IP (3 ครั้ง / 24 ชม. กันคนมีหลาย LINE account)
+const ipRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(3, '24 h'),
+  prefix: 'rl:ip',
+});
+
+async function verifyLiffToken(accessToken) {
+  const res = await fetch(`https://api.line.me/oauth2/v2.1/verify?access_token=${accessToken}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  // ตรวจสอบว่า token ออกจาก channel ของเราจริง
+  if (data.client_id !== process.env.LINE_CHANNEL_ID) return null;
+  if (data.expires_in <= 0) return null;
+  return data;
+}
+
+async function getLineProfile(accessToken) {
+  const res = await fetch('https://api.line.me/v2/profile', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
 
 export async function POST(req) {
   try {
-    const { uid } = await req.json();
+    const { accessToken } = await req.json();
 
-    if (!uid || typeof uid !== 'string' || !uid.startsWith('U')) {
-      return Response.json({ status: 'unauthorized' });
+    if (!accessToken || typeof accessToken !== 'string') {
+      return Response.json({ status: 'unauthorized' }, { status: 401 });
     }
 
-    // Rate limit ต่อ Line UID
-    const { success, reset } = await ratelimit.limit(uid);
-    if (!success) {
-      const retryAfterHrs = Math.ceil((reset - Date.now()) / 1000 / 60 / 60);
+    // ยืนยัน token กับ LINE server
+    const tokenInfo = await verifyLiffToken(accessToken);
+    if (!tokenInfo) {
+      return Response.json({ status: 'unauthorized' }, { status: 401 });
+    }
+
+    // ดึง profile จาก LINE
+    const profile = await getLineProfile(accessToken);
+    if (!profile || !profile.userId) {
+      return Response.json({ status: 'unauthorized' }, { status: 401 });
+    }
+
+    const uid = profile.userId;
+
+    // Rate limit ต่อ IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const ipResult = await ipRatelimit.limit(ip);
+    if (!ipResult.success) {
+      const retryAfterHrs = Math.ceil((ipResult.reset - Date.now()) / 1000 / 60 / 60);
+      return Response.json({ status: 'rate_limited', retryAfter: retryAfterHrs });
+    }
+
+    // Rate limit ต่อ UID
+    const uidResult = await uidRatelimit.limit(uid);
+    if (!uidResult.success) {
+      const retryAfterHrs = Math.ceil((uidResult.reset - Date.now()) / 1000 / 60 / 60);
       return Response.json({ status: 'rate_limited', retryAfter: retryAfterHrs });
     }
 
