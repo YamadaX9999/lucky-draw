@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis';
 
 const redis = Redis.fromEnv();
 
-const DISPLAY_TOTAL = 1000;
+const DISPLAY_TOTAL = 500;
 const LOG_CAP = 1000;
 
 function getAdminKey(req) {
