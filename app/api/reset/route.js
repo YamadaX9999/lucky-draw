@@ -26,7 +26,7 @@ export async function POST(req) {
       return Response.json({ error: 'Too many attempts. Try again later.' }, { status: 429 });
     }
 
-    const keyPatterns = ['line:*', 'rl:uid:*', 'rl:ip:*', 'rl:reset:*', '@upstash/ratelimit:*'];
+    const keyPatterns = ['line:*', 'rl:uid*', 'rl:ip*', 'rl:reset*', '@upstash/ratelimit*'];
     for (const pattern of keyPatterns) {
       let cursor = 0;
       do {
